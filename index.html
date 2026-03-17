@@ -26,7 +26,7 @@
             <h1 class="text-4xl font-bold mb-2 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
                 Crypto News AI Score
             </h1>
-            <p class="text-gray-400">加密货币新闻 AI 情绪分析 (本地模型)</p>
+            <p class="text-gray-400">加密货币新闻 AI 5维情绪分析 (本地模型)</p>
             <div class="mt-4 flex justify-center gap-4">
                 <button onclick="refreshNews()" class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg font-medium transition flex items-center gap-2">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
@@ -43,22 +43,33 @@
         </header>
 
         <!-- Stats -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
             <div class="bg-gray-800/50 backdrop-blur rounded-xl p-4 text-center">
-                <div class="text-2xl font-bold text-blue-400" id="totalNews">-</div>
-                <div class="text-gray-400 text-sm">新闻总数</div>
+                <div class="text-2xl font-bold text-blue-400" id="avgMomentum">-</div>
+                <div class="text-gray-400 text-sm">动量</div>
             </div>
             <div class="bg-gray-800/50 backdrop-blur rounded-xl p-4 text-center">
-                <div class="text-2xl font-bold text-green-400" id="bullishCount">-</div>
-                <div class="text-gray-400 text-sm">看涨</div>
+                <div class="text-2xl font-bold text-purple-400" id="avgVolume">-</div>
+                <div class="text-gray-400 text-sm">热度</div>
             </div>
             <div class="bg-gray-800/50 backdrop-blur rounded-xl p-4 text-center">
-                <div class="text-2xl font-bold text-red-400" id="bearishCount">-</div>
-                <div class="text-gray-400 text-sm">看跌</div>
+                <div class="text-2xl font-bold text-yellow-400" id="avgSentiment">-</div>
+                <div class="text-gray-400 text-sm">情绪</div>
             </div>
             <div class="bg-gray-800/50 backdrop-blur rounded-xl p-4 text-center">
-                <div class="text-2xl font-bold text-gray-400" id="avgScore">-</div>
-                <div class="text-gray-400 text-sm">平均情绪分</div>
+                <div class="text-2xl font-bold text-green-400" id="avgUtility">-</div>
+                <div class="text-gray-400 text-sm">实用性</div>
+            </div>
+            <div class="bg-gray-800/50 backdrop-blur rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-red-400" id="avgRisk">-</div>
+                <div class="text-gray-400 text-sm">风险</div>
+            </div>
+        </div>
+
+        <div class="text-center mb-8">
+            <div class="inline-block bg-gradient-to-r from-blue-600 to-purple-600 px-8 py-3 rounded-xl">
+                <div class="text-3xl font-bold" id="totalScore">-</div>
+                <div class="text-sm text-gray-200">总分 (25分制)</div>
             </div>
         </div>
 
@@ -79,13 +90,19 @@
     </div>
 
     <script>
-        // Cloudflare Tunnel URL for local OMLX model
+        // Cloudflare Tunnel URL - UPDATE THIS IF CHANGED
         const OMLX_BASE_URL = 'https://mask-cooling-ant-thumbnails.trycloudflare.com';
         
         let allNews = [];
         let analysisCache = {};
 
-        // Extract coins from title
+        // 5 Dimensions:
+        // 1. momentum (动量): 价格动量/趋势强度 0-5
+        // 2. volume (热度): 市场关注度/交易活跃度 0-5
+        // 3. sentiment (情绪): 市场情绪方向 0-5
+        // 4. utility (实用性): 信息对投资决策的帮助程度 0-5
+        // 5. risk (风险): 潜在风险程度 0-5
+
         function extractCoins(title) {
             const coins = [];
             const titleLower = title.toLowerCase();
@@ -110,9 +127,7 @@
             return [...new Set(coins)].slice(0, 3);
         }
 
-        // Call local AI model via Cloudflare Tunnel
         async function analyzeWithAI(title) {
-            // Check cache
             const cacheKey = title.substring(0, 50);
             if (analysisCache[cacheKey]) {
                 return analysisCache[cacheKey];
@@ -130,14 +145,24 @@
                         messages: [
                             {
                                 role: 'system',
-                                content: '你是一个专业的加密货币情绪分析师。请分析以下新闻标题，输出JSON格式的分析结果。输出格式：{"sentiment":"bullish/bearish/neutral","score":0-100,"reason":"简短原因"}'
+                                content: `你是一个专业的加密货币情绪分析师。请分析以下新闻标题，从5个维度进行评分。
+
+评分维度（每个0-5分，总分25分）：
+1. 动量(momentum): 价格动量/趋势强度，5分=强势上涨/突破，1分=弱势下跌
+2. 热度(volume): 市场关注度/讨论热度，5分=高度关注，1分=无人问津
+3. 情绪(sentiment): 市场整体情绪，5分=极度乐观，1分=极度悲观
+4. 实用性(utility): 对投资决策的帮助，5分=非常有价值，1分=无价值
+5. 风险(risk): 潜在风险程度，5分=高风险需谨慎，1分=安全无风险
+
+请严格按以下JSON格式输出，不要有其他内容：
+{"momentum":0-5,"volume":0-5,"sentiment":0-5,"utility":0-5,"risk":0-5}`
                             },
                             {
                                 role: 'user',
-                                content: `分析这个加密货币新闻标题的情绪：${title}`
+                                content: `分析这个加密货币新闻：${title}`
                             }
                         ],
-                        max_tokens: 150,
+                        max_tokens: 200,
                         temperature: 0.3
                     })
                 });
@@ -145,54 +170,39 @@
                 const data = await response.json();
                 const content = data.choices[0].message.content;
                 
-                // Parse JSON response
                 try {
                     const result = JSON.parse(content);
-                    analysisCache[cacheKey] = result;
-                    return result;
+                    // Validate scores
+                    const scores = {
+                        momentum: Math.min(5, Math.max(0, Math.round(result.momentum || 3))),
+                        volume: Math.min(5, Math.max(0, Math.round(result.volume || 3))),
+                        sentiment: Math.min(5, Math.max(0, Math.round(result.sentiment || 3))),
+                        utility: Math.min(5, Math.max(0, Math.round(result.utility || 3))),
+                        risk: Math.min(5, Math.max(0, Math.round(result.risk || 3)))
+                    };
+                    scores.total = scores.momentum + scores.volume + scores.sentiment + scores.utility + scores.risk;
+                    analysisCache[cacheKey] = scores;
+                    return scores;
                 } catch (e) {
-                    // If JSON parsing fails, try to extract sentiment from text
-                    const lowerContent = content.toLowerCase();
-                    if (lowerContent.includes('bullish') || lowerContent.includes('看涨')) {
-                        return { sentiment: 'bullish', score: 70, reason: 'AI判断看涨' };
-                    } else if (lowerContent.includes('bearish') || lowerContent.includes('看跌')) {
-                        return { sentiment: 'bearish', score: 30, reason: 'AI判断看跌' };
-                    }
-                    return { sentiment: 'neutral', score: 50, reason: 'AI判断中性' };
+                    console.log('JSON parse failed, using fallback');
+                    return getDefaultScores();
                 }
             } catch (error) {
                 console.error('AI分析失败:', error);
-                // Fallback to local analysis
-                return analyzeSentimentLocal(title);
+                return getDefaultScores();
             }
         }
 
-        // Local fallback sentiment analysis
-        function analyzeSentimentLocal(title) {
-            const text = title.toLowerCase();
-            const bullishKeywords = ['surge', 'surges', 'rally', 'bullish', 'breakout', 'high', 'record', 'gain', 'growth', 'adoption', 'launch', 'upgrade', 'institutional', 'all-time high', 'up', 'rise'];
-            const bearishKeywords = ['crash', 'crashes', 'plunge', 'bearish', 'breakdown', 'low', 'loss', 'decline', 'outage', 'delay', 'concern', 'regulatory', 'hack', 'ban', 'down', 'fall', 'drop'];
-            
-            let bullishScore = 0;
-            let bearishScore = 0;
-            
-            bullishKeywords.forEach(k => { if(text.includes(k)) bullishScore++; });
-            bearishKeywords.forEach(k => { if(text.includes(k)) bearishScore++; });
-            
-            if (bullishScore > bearishScore) return { sentiment: 'bullish', score: Math.min(95, 50 + bullishScore * 15), reason: '关键词分析' };
-            if (bearishScore > bullishScore) return { sentiment: 'bearish', score: Math.max(5, 50 - bearishScore * 15), reason: '关键词分析' };
-            
-            return { sentiment: 'neutral', score: 50, reason: '关键词分析' };
-        }
-
-        function getImpactScore(title) {
-            const highImpactKeywords = ['bitcoin', 'ethereum', 'sec', 'etf', 'institutional', 'blackrock', ' Fidelity', 'regulation', '批准', 'launch'];
-            let score = 5;
-            const lowerTitle = title.toLowerCase();
-            highImpactKeywords.forEach(k => {
-                if(lowerTitle.includes(k)) score += 2;
-            });
-            return Math.min(10, score);
+        function getDefaultScores() {
+            const scores = {
+                momentum: 3,
+                volume: 3,
+                sentiment: 3,
+                utility: 3,
+                risk: 3,
+                total: 15
+            };
+            return scores;
         }
 
         async function refreshNews() {
@@ -201,22 +211,19 @@
             document.getElementById('newsGrid').innerHTML = '';
             
             try {
-                // Fetch from CoinGecko Trending API
                 const response = await fetch('https://api.coingecko.com/api/v3/search/trending');
                 const data = await response.json();
                 
-                // Process each news with AI
                 const newsPromises = data.coins.slice(0, 8).map(async (coinItem, index) => {
                     const item = coinItem.item;
                     const title = item.name + ' (' + item.symbol.toUpperCase() + '): Trending #' + item.market_cap_rank;
                     
-                    // Try AI analysis, fallback to local
-                    let analysis;
+                    let scores;
                     try {
                         document.getElementById('loading').querySelector('p').textContent = `AI 分析中: ${index + 1}/${Math.min(8, data.coins.length)}`;
-                        analysis = await analyzeWithAI(title);
+                        scores = await analyzeWithAI(title);
                     } catch (e) {
-                        analysis = analyzeSentimentLocal(title);
+                        scores = getDefaultScores();
                     }
                     
                     const coins = extractCoins(title);
@@ -228,10 +235,7 @@
                         url: 'https://www.coingecko.com/en/coins/' + item.id,
                         published: new Date().toISOString(),
                         coins: coins.length > 0 ? coins : [item.symbol.toUpperCase()],
-                        sentiment: analysis.sentiment || 'neutral',
-                        score: analysis.score || 50,
-                        reason: analysis.reason || '',
-                        impact: getImpactScore(title),
+                        ...scores,
                         keywords: [item.symbol.toUpperCase(), item.market_cap_rank <= 10 ? 'Top10' : 'Altcoin'],
                         priceChange24h: item.data?.price_change_percentage_24h || 0
                     };
@@ -264,10 +268,16 @@
             }
             
             grid.innerHTML = filtered.map(news => {
-                const scoreClass = news.sentiment === 'bullish' ? 'score-bullish' : 
-                                 news.sentiment === 'bearish' ? 'score-bearish' : 'score-neutral';
-                const sentimentLabel = news.sentiment === 'bullish' ? '🐂 看涨' : 
-                                     news.sentiment === 'bearish' ? '🐻 看跌' : '➡️ 中性';
+                // Determine overall sentiment based on total score
+                let sentimentClass = 'score-neutral';
+                let sentimentLabel = '➡️ 中性';
+                if (news.total >= 18) {
+                    sentimentClass = 'score-bullish';
+                    sentimentLabel = '🐂 看涨';
+                } else if (news.total <= 10) {
+                    sentimentClass = 'score-bearish';
+                    sentimentLabel = '🐻 看跌';
+                }
                 
                 const priceChangeColor = news.priceChange24h >= 0 ? 'text-green-400' : 'text-red-400';
                 
@@ -282,19 +292,39 @@
                             ${news.keywords.map(k => `<span class="bg-gray-700 px-2 py-1 rounded text-xs">${k}</span>`).join('')}
                             ${news.coins.map(c => `<span class="bg-blue-900/50 text-blue-300 px-2 py-1 rounded text-xs">${c}</span>`).join('')}
                         </div>
+                        
+                        <!-- 5 Dimensions Score -->
+                        <div class="grid grid-cols-5 gap-2 mb-4 text-center">
+                            <div class="bg-gray-700/50 rounded p-2">
+                                <div class="text-lg font-bold text-blue-400">${news.momentum}</div>
+                                <div class="text-xs text-gray-400">动量</div>
+                            </div>
+                            <div class="bg-gray-700/50 rounded p-2">
+                                <div class="text-lg font-bold text-purple-400">${news.volume}</div>
+                                <div class="text-xs text-gray-400">热度</div>
+                            </div>
+                            <div class="bg-gray-700/50 rounded p-2">
+                                <div class="text-lg font-bold text-yellow-400">${news.sentiment}</div>
+                                <div class="text-xs text-gray-400">情绪</div>
+                            </div>
+                            <div class="bg-gray-700/50 rounded p-2">
+                                <div class="text-lg font-bold text-green-400">${news.utility}</div>
+                                <div class="text-xs text-gray-400">实用</div>
+                            </div>
+                            <div class="bg-gray-700/50 rounded p-2">
+                                <div class="text-lg font-bold text-red-400">${news.risk}</div>
+                                <div class="text-xs text-gray-400">风险</div>
+                            </div>
+                        </div>
+                        
                         <div class="flex justify-between items-center">
                             <div class="flex items-center gap-3">
-                                <div class="${scoreClass} px-3 py-1 rounded-lg text-sm font-medium">
-                                    ${news.score}
+                                <div class="${sentimentClass} px-3 py-1 rounded-lg text-sm font-bold">
+                                    ${news.total}/25
                                 </div>
                                 <span class="text-sm">${sentimentLabel}</span>
                             </div>
-                            <div class="flex items-center gap-1">
-                                <span class="text-gray-400 text-sm">影响力:</span>
-                                <span class="text-yellow-400 font-medium">${news.impact}/10</span>
-                            </div>
                         </div>
-                        ${news.reason ? `<div class="mt-2 text-xs text-gray-500">${news.reason}</div>` : ''}
                     </div>
                 `;
             }).join('');
@@ -305,14 +335,21 @@
         }
 
         function updateStats() {
-            const bullish = allNews.filter(n => n.sentiment === 'bullish').length;
-            const bearish = allNews.filter(n => n.sentiment === 'bearish').length;
-            const avg = allNews.length > 0 ? Math.round(allNews.reduce((a, b) => a + b.score, 0) / allNews.length) : 0;
+            if (allNews.length === 0) return;
             
-            document.getElementById('totalNews').textContent = allNews.length;
-            document.getElementById('bullishCount').textContent = bullish;
-            document.getElementById('bearishCount').textContent = bearish;
-            document.getElementById('avgScore').textContent = avg;
+            const avgMomentum = Math.round(allNews.reduce((a, b) => a + b.momentum, 0) / allNews.length * 10) / 10;
+            const avgVolume = Math.round(allNews.reduce((a, b) => a + b.volume, 0) / allNews.length * 10) / 10;
+            const avgSentiment = Math.round(allNews.reduce((a, b) => a + b.sentiment, 0) / allNews.length * 10) / 10;
+            const avgUtility = Math.round(allNews.reduce((a, b) => a + b.utility, 0) / allNews.length * 10) / 10;
+            const avgRisk = Math.round(allNews.reduce((a, b) => a + b.risk, 0) / allNews.length * 10) / 10;
+            const totalAvg = Math.round(allNews.reduce((a, b) => a + b.total, 0) / allNews.length);
+            
+            document.getElementById('avgMomentum').textContent = avgMomentum;
+            document.getElementById('avgVolume').textContent = avgVolume;
+            document.getElementById('avgSentiment').textContent = avgSentiment;
+            document.getElementById('avgUtility').textContent = avgUtility;
+            document.getElementById('avgRisk').textContent = avgRisk;
+            document.getElementById('totalScore').textContent = totalAvg;
         }
 
         // Initial load
